@@ -1,0 +1,39 @@
+WITH data AS(
+        SELECT 
+        pg.*
+        , t.time_completed
+        , CASE 
+        WHEN payment_date IS NULL THEN 'a. no_payment'
+
+        WHEN payment_date IS NOT NULL AND TRY_PARSE_JSON(notes):data:authorization:channel ilike '%card%' 
+                                      OR TRY_PARSE_JSON(notes):data:reference ilike '%Card%' 
+                                      THEN 'b. CARD'
+
+        WHEN payment_date IS NOT NULL AND TRY_PARSE_JSON(notes):data:authorization:channel ilike '%ussd%' 
+                                      OR TRY_PARSE_JSON(notes):data ilike '%ussd_code%' 
+                                      THEN 'c. USSD'
+
+        WHEN payment_date IS NOT NULL AND TRY_PARSE_JSON(notes):data:authorization:channel ilike '%dedicated_nuban%' 
+                                      OR lower(notes) ilike '%nuban%' 
+                                      THEN 'd. NUBAN'
+
+        WHEN payment_date IS NOT NULL AND notes ilike '%Cash repayment%' THEN 'e. CASH'
+
+        ELSE 'g. unclassified_channels' END AS txn_channels
+
+        FROM payment_grp pg
+        LEFT JOIN user_transactions t
+          ON pg.loan_id = t.loan_id
+        AND pg.payment_date = t.time_completed
+        AND t.txn_type IN (2,5)   --- repayment for credit facility and tax
+        AND t.status = 'Completed_transaction'
+        ORDER BY time_completed DESC
+          ),
+
+SELECT 
+DATE_TRUNC(day, time_completed) AS Period
+, txn_channels
+, COUNT(*) AS transaction_count
+FROM data
+GROUP BY 1,2
+ORDER BY 1 ASC

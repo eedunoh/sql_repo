@@ -1,0 +1,16 @@
+SELECT
+DATE_TRUNC('day',registered_at) AS registration_day,
+COUNT(CASE WHEN first_loan_app_submitted_at IS NOT NULL THEN c.user_id ELSE NULL END)::FLOAT/COUNT(CASE WHEN registered_at IS NOT NULL THEN c.user_id ELSE NULL END)::FLOAT AS register_to_submit_rate,
+
+COUNT(CASE WHEN first_loan_app_approved_at IS NOT NULL THEN c.user_id ELSE NULL END)::FLOAT/COUNT(CASE WHEN registered_at IS NOT NULL THEN c.user_id ELSE NULL END)::FLOAT AS register_to_approved_rate,
+
+COUNT(CASE WHEN first_loan_disbursed_at IS NOT NULL THEN c.user_id ELSE NULL END)::FLOAT/COUNT(CASE WHEN registered_at IS NOT NULL THEN c.user_id ELSE NULL END)::FLOAT AS register_to_disbursed_rate,
+COUNT(*) AS user_count
+FROM customer_conversion_stats c
+INNER JOIN core.users_data_inc u 
+  USING c.user_id = u.id
+WHERE True
+AND u.user_country_code = 'ng'
+AND registration_day >= '2022-01-01'
+GROUP BY 1
+ORDER BY 1

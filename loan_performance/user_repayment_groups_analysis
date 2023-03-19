@@ -1,0 +1,23 @@
+SELECT 
+DATE_TRUNC('week', loan_due_date) AS due_week
+, ls.loan_tenure
+, CASE 
+     WHEN date_repaid IS NULL THEN 'Default_till_date'
+     WHEN datediff('day', loan_due_date, date_repaid) > 0 THEN 'repaid_late_Dq'
+     WHEN datediff('day', loan_due_date, date_repaid) = 0 THEN 'Same_day_payment'
+     WHEN datediff('day', loan_due_date, date_repaid) < 0 THEN 'Early_payment'
+END AS payment_grps
+, SUM(ls.amount_fee) / SUM (ls.principal_disbursed) AS pct_principal_charged_as_fee
+, AVG(ls.amount_fee) as AVG_fee
+, SUM(ls.principal_disbursed * ls.amount_fee)/ SUM(ls.principal_disbursed) AS weighted_average_of_fee
+FROM core.due_repayments dr
+INNER JOIN derived.loan_details_statistics ls
+  ON dr.loan_id = ls.loan_id
+  AND ls.currency = 'NGN'
+WHERE True
+AND dr.status = 1
+AND getdate() > dr.date_scheduled
+AND due_week >= getdate() - INTERVAL '52 weeks'
+AND due_week < getdate() - INTERVAL '7 days'
+GROUP BY 1,2,3
+ORDER BY 1 ASC, 2 ASC

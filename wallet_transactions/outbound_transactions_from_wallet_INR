@@ -1,0 +1,32 @@
+SELECT 
+*
+FROM
+    (
+    SELECT 
+    transaction_id
+    , t.user_id
+    , u.first_name || ' ' || u.last_name AS user_name
+    , funding_direction
+    , wallet_transaction_type
+    , CASE WHEN tr.notes = '{}' THEN 'NULL' 
+           ELSE TRY_PARSE_JSON(tr.notes):data:recipient:details:account_number::varchar 
+      END AS beneficiary_account_number
+    , CASE WHEN tr.notes = '{}' THEN TRY_PARSE_JSON(tr.Metadata):beneficiary_account_name::varchar 
+            ELSE TRY_PARSE_JSON(tr.notes):data:recipient:name::varchar 
+      END AS beneficiary_name
+    , t.created_at
+    , t.amount AS single_transaction_amount
+    , SUM(t.amount) OVER (PARTITION BY t.user_id, DATE(t.created_at),funding_direction) AS daily_txn_total
+      
+    FROM derived.wallet_transactions t
+    LEFT JOIN core.transactions tr
+      ON t.transaction_id = tr.id
+    LEFT JOIN core.users u
+      ON t.user_id = u.id
+    WHERE True
+    AND t.currency = 'INR'
+    AND t.wallet_transaction_type = 'wallet_to_other_bank_account'
+    )
+WHERE TRUE
+AND daily_txn_total >= 5000000
+ORDER BY created_at DESC, user_id

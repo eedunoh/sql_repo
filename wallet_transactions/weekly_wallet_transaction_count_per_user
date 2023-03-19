@@ -1,0 +1,14 @@
+SELECT
+CAST(date_trunc(week, time_completed) As Date) As week
+, user_id
+, COUNT(*) As User_txn_count
+FROM derived.wallet_transactions
+WHERE True
+AND currency = 'NGN'
+AND wallet_transaction_type IN ('wallet_to_bill_payment'
+                                , 'deposit_to_wallet'
+                                , 'wallet_to_own_bank_account'
+                                , 'wallet_to_other_bank_account'
+                                , 'debit_card_transaction')
+GROUP BY 1,2
+HAVING User_txn_count >= 5

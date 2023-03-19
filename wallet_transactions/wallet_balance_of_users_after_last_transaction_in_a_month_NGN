@@ -1,0 +1,79 @@
+WITH inbound_transactions AS (
+          SELECT
+              time_completed AS date,
+              t.internal_to_account_id AS account_id
+              a.user_id,
+              SUM(t.amount) AS total
+          FROM core.user_transactions t
+          JOIN core.accounts a
+              ON a.id = t.internal_to_account_id
+              AND t.internal_to_account_type = 'InvestmentAccount'   --- inbound_transactions
+          WHERE t.status = 'Completed_transaction'
+          AND a.presentation = 'Wallet'
+          AND a.currency = 'NGN'
+          GROUP BY 1,2,3
+          ORDER BY user_id ASC, date ASC
+            ),
+
+
+
+outbound_transactions AS (
+        SELECT
+            time_completed AS date,
+            t.internal_from_account_id AS account_id,
+            a.user_id,
+            -1 * SUM(t.amount) AS total
+        FROM core.user_transactions t
+        JOIN core.accounts a
+            ON a.id = t.internal_from_account_id 
+            AND t.internal_from_account_type = 'InvestmentAccount'   --- outbound_transactions
+        WHERE t.status = 'Completed_transaction'
+        AND a.presentation = 'Wallet'
+        AND a.currency = 'NGN'
+        GROUP BY 1,2,3
+        ORDER BY user_id ASC, date ASC
+          ),
+
+
+
+time_series AS (
+        SELECT DISTINCT date 
+        FROM inbound_transactions
+
+        UNION ALL
+
+        SELECT DISTINCT date 
+        FROM outbound_transactions
+          ),
+
+
+
+user_balance AS (
+        SELECT 
+        t.date AS transaction_date
+        , it.user_id AS user_id_credit
+        , ot.user_id AS user_id_debit
+        , COALESCE(it.user_id, ot.user_id) AS user_ids
+        , CASE WHEN it.total IS NULL THEN 0 ELSE it.total END AS Credit
+        , CASE WHEN ot.total IS NULL THEN 0 ELSE ot.total END AS Debit
+        , Credit + Debit AS time_series_balance
+        , SUM(time_series_balance) OVER(PARTITION BY user_ids ORDER BY transaction_date ASC ROWS UNBOUNDED PRECEDING) AS final_balance
+  
+        FROM time_series t
+        LEFT JOIN inbound_transactions it
+        ON t.date = it.date
+        LEFT JOIN outbound_transactions ot
+        ON t.date = ot.date
+        WHERE True
+        ORDER BY user_ids ASC, transaction_date ASC
+          )
+
+
+
+SELECT 
+user_ids
+, DATE_TRUNC(month, transaction_date) AS Month
+, final_balance AS Balance_after_last_txn_of_the_month
+FROM user_balance
+QUALIFY row_number() OVER(PARTITION BY user_ids, date_trunc(month, transaction_date) ORDER BY transaction_date DESC) = 1
+ORDER BY 1 ASC, transaction_date ASC
